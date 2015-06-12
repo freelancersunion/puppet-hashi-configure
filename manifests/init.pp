@@ -1,32 +1,80 @@
-# == Class: packer
+# == Class: terraform
 #
-# Installs Packer, the modern automated machine image creation tool.
+# Installs Terraform, the modern automated infrastructure creation tool.
 #
 # === Parameters
 #
 # [*ensure*]
-#  Defaults to 'installed', if set to 'absent' will remove Packer.
+#  Defaults to 'installed', if set to 'absent' will remove Terraform.
 #
 # [*version*]
-#  The version of Packer to install, defaults to '0.7.5'.
+#  The version of Terraform to install, defaults to '0.5.3'.
 #
 # [*bin_dir*]
-#  The binary directory to place Packer in.  Defaults to '/usr/local/bin'.
+#  The binary directory to place Terraform in.  Defaults to '/usr/local/bin'.
 #
 # [*cache_dir*]
-#  The directory to cache Packer release archives in.  Defaults to
-#  '/usr/local/packer'.
+#  The directory to cache Terraform release archives in.  Defaults to
+#  '/usr/local/terraform'.
 #
 # [*base_url*]
-#  The base download URL to retrieve Packer from, including a
-#  a trailing '/'.  Defaults to: 'https://dl.bintray.com/mitchellh/packer/'.
+#  The base download URL to retrieve Terraform from, including a
+#  a trailing '/'.  Defaults to: 'https://dl.bintray.com/mitchellh/terraform/'.
 #
-class packer(
+class hashiconfigure(){
+
+
+class terraform(
+  $version   = '0.5.3',
+  $latest_legacy_version = '0.1.0',
+  $lowercase_name = 'terraform',
+  $uppercase_name = 'Terraform',
+  $package_contents = [
+    'terraform',
+    'terraform-provider-atlas',
+    'terraform-provider-aws',
+    'terraform-provider-cloudflare',
+    'terraform-provider-cloudstack',
+    'terraform-provider-consul',
+    'terraform-provider-digitalocean',
+    'terraform-provider-dme',
+    'terraform-provider-dnsimple',
+    'terraform-provider-docker',
+    'terraform-provider-google',
+    'terraform-provider-heroku',
+    'terraform-provider-mailgun',
+    'terraform-provider-null',
+    'terraform-provider-openstack',
+    'terraform-provider-template',
+    'terraform-provider-terraform',
+    'terraform-provisioner-chef',
+    'terraform-provisioner-file',
+    'terraform-provisioner-local-exec',
+    'terraform-provisioner-remote-exec',
+  ]
+){
+  create_resource(
+    'hashicorp::binarry', 
+    {
+      'version'               => $version,
+      'latest_legacy_version' => $latest_legacy_version,
+      'lowercase_name'        => $lowercase_name,
+      'uppercase_name'        => $uppercase_name,
+      'package_contents'      => $package_contents,
+    }
+  )
+}
+
+
+class binary(
+  $version,
+  $lowercase_name,
+  $uppercase_name,
+  $package_contents,
   $ensure    = 'installed',
-  $version   = '0.7.5',
   $bin_dir   = '/usr/local/bin',
-  $cache_dir = '/usr/local/packer',
-  $base_url  = 'https://dl.bintray.com/mitchellh/packer/',
+  $cache_dir = '/usr/local/${lowercase_name}',
+  $base_url = 'https://dl.bintray.com/mitchellh/${lowercase_name}/'
 ){
   case $ensure {
     'present', 'installed': {
@@ -40,20 +88,20 @@ class packer(
         $arch = '386'
       }
 
-      if versioncmp($version, '0.7.0') >= 0 {
-        $prefix = 'packer_'
+      if versioncmp($version, '0.1.0') >= 0 {
+        $prefix = '${lowercase_name}_'
       } else {
         $prefix = ''
       }
 
-      $packer_basename = inline_template(
+      $hashicorp_basename = inline_template(
         "<%= \"#{@prefix}#{@version}_#{scope['::kernel'].downcase}_#{@arch}.zip\" %>"
       )
 
-      $packer_zip = "${cache_dir}/${packer_basename}"
-      $packer_url = "${base_url}${packer_basename}"
+      $hashicorp_zip = "${cache_dir}/${hashicorp_basename}"
+      $hashicorp_url = "${base_url}${hashicorp_basename}"
 
-      # Ensure cache directory for Packer's zip archives exists.
+      # Ensure cache directory for this program's zip archives exists.
       file { $cache_dir:
         ensure => directory,
         owner  => 'root',
@@ -61,61 +109,27 @@ class packer(
         mode   => '0644',
       }
 
-      # Download the Packer zip archive to the cache.
-      sys::fetch { 'download-packer':
-        destination => $packer_zip,
-        source      => $packer_url,
+      # Download the Hashicorp zip archive to the cache.
+      sys::fetch { 'download-${lowercase_name}':
+        destination => $hashicorp_zip,
+        source      => $hashicorp_url,
         require     => File[$cache_dir],
       }
 
       # Unzip directly into the binary directory, overwriting previous files.
-      exec { 'install-packer':
-        command => "${sys::unzip::path} -o ${packer_zip}",
+      exec { 'install-${lowercase_name}':
+        command => "${sys::unzip::path} -o ${hashicorp_zip}",
         path    => [$bin_dir, '/usr/bin', '/bin'],
         cwd     => $bin_dir,
         user    => 'root',
-        unless  => "test -x packer && packer version | head -n 1 | grep '^Packer v${version}$'",
-        require => Sys::Fetch['download-packer'],
+        unless  => "test -x ${lowercase_name} && ${lowercase_name} version | head -n 1 | grep '^${uppercase_name} v${version}$'",
+        require => Sys::Fetch['download-${lowercase_name}'],
       }
     }
     'absent', 'uninstalled': {
       # Ensure the binaries are removed.
       $binaries = prefix(
-        [
-          'packer',
-          'packer-builder-amazon-chroot',
-          'packer-builder-amazon-ebs',
-          'packer-builder-amazon-instance',
-          'packer-builder-digitalocean',
-          'packer-builder-docker',
-          'packer-builder-googlecompute',
-          'packer-builder-null',
-          'packer-builder-openstack',
-          'packer-builder-parallels-iso',
-          'packer-builder-parallels-pvm',
-          'packer-builder-qemu',
-          'packer-builder-virtualbox-iso',
-          'packer-builder-virtualbox-ovf',
-          'packer-builder-vmware-iso',
-          'packer-builder-vmware-vmx',
-          'packer-post-processor-atlas',
-          'packer-post-processor-compress',
-          'packer-post-processor-docker-import',
-          'packer-post-processor-docker-push',
-          'packer-post-processor-docker-save',
-          'packer-post-processor-docker-tag',
-          'packer-post-processor-vagrant',
-          'packer-post-processor-vagrant-cloud',
-          'packer-post-processor-vsphere',
-          'packer-provisioner-ansible-local',
-          'packer-provisioner-chef-client',
-          'packer-provisioner-chef-solo',
-          'packer-provisioner-file',
-          'packer-provisioner-puppet-masterless',
-          'packer-provisioner-puppet-server',
-          'packer-provisioner-salt-masterless',
-          'packer-provisioner-shell',
-        ],
+        $package_contents,
         "${bin_dir}/"
       )
 
@@ -124,7 +138,8 @@ class packer(
       }
     }
     default: {
-      fail("Invalid ensure value for packer: ${ensure}.\n")
+      fail("Invalid ensure value for ${lowercase_name}: ${ensure}.\n")
     }
   }
+}
 }
